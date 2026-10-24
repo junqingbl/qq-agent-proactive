@@ -6,6 +6,8 @@
 
 给 **[qq-agent](https://github.com/lyyde599/qq-agent)** 与基于其插件内核的版本（BG-QQagent v3 一类）用。
 
+![主动搭话是怎么判断该不该开口的](docs/how-it-works.png)
+
 ## 这个仓库里有两个版本
 
 | 你的程序 | 怎么认 | 用哪个目录 |
