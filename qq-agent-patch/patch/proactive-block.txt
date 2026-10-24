@@ -1,0 +1,127 @@
+  startProactiveLoop() {
+    this.stopProactiveLoop();
+    const tick = async () => {
+      const cfg = getConfig();
+      const p = cfg.proactive || {};
+      const intervalMs = Math.max(60000, Number(p.intervalMinMs) || 1800000);
+      this.proactiveTimer = setTimeout(() => { tick().catch(() => {}); }, intervalMs);
+      try {
+        if (this.aborted || this.paused || p.enabled !== true) return;
+        const now = new Date();
+        if (this.#pQuiet(p, now)) { await this.#pLog(p, '安静时段（' + p.quietStartHour + '~' + p.quietEndHour + ' 点），不掷'); return; }
+        const state = await this.#pState();
+        if (state.lastSpokeAt && Date.now() - state.lastSpokeAt < Math.max(0, Number(p.cooldownMs) || 0)) {
+          await this.#pLog(p, '冷却中（上次开口 ' + Math.round((Date.now() - state.lastSpokeAt) / 60000) + ' 分钟前）');
+          return;
+        }
+        const candidates = this.#pCandidates(cfg, p);
+        if (!candidates.length) { await this.#pLog(p, '没有符合条件的会话'); return; }
+        const chatKey = candidates[0];
+        const meta = this.store.getChatMeta(chatKey);
+        const gapMin = Math.round((Date.now() - meta.lastTs) / 60000);
+        const line = this.#pHit(p, state, gapMin, now);
+        const roll = Math.random() * 100;
+        if (roll >= line.hit) {
+          state.streak = (state.streak || 0) + 1;
+          await this.#pSave(state);
+          await this.#pLog(p, '没中：掷出 ' + roll.toFixed(1) + ' ／ 命中线 ' + line.hit.toFixed(1) + '（' + line.why + '，连没中 ' + state.streak + ' 次）');
+          return;
+        }
+        state.streak = 0;
+        if (p.dryRun === true) { await this.#pSave(state); await this.#pLog(p, '试运行命中：掷出 ' + roll.toFixed(1) + ' ／ 命中线 ' + line.hit.toFixed(1) + '，没真发'); return; }
+        state.lastSpokeAt = Date.now();
+        await this.#pSave(state);
+        await this.#pLog(p, '命中并开口：掷出 ' + roll.toFixed(1) + ' ／ 命中线 ' + line.hit.toFixed(1) + '（' + line.why + '，已安静 ' + gapMin + ' 分钟）');
+        this.wake(chatKey, { proactive: true }).catch((error) => console.error('[orchestrator] proactive 出错:', error));
+      } catch (error) {
+        console.error('[orchestrator] proactive tick 出错:', error);
+      }
+    };
+    this.proactiveTimer = setTimeout(() => { tick().catch(() => {}); }, 15000);
+  }
+
+  #pQuiet(p, now) {
+    const a = Number(p.quietStartHour);
+    const b = Number(p.quietEndHour);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) return false;
+    const h = now.getHours();
+    return a < b ? (h >= a && h < b) : (h >= a || h < b);
+  }
+
+  #pHit(p, state, gapMin, now) {
+    const day = now.getDay();
+    const h = now.getHours();
+    const peak = day >= 1 && day <= 5 && ((h >= 9 && h < 12) || (h >= 14 && h < 18));
+    const base = peak ? (Number(p.peakPct) || 20) : (Number(p.offPeakPct) || 60);
+    let factor = 1;
+    let why = peak ? '峰时' : '谷时';
+    if (gapMin < 20) { factor = 0.15; why += '／刚聊过×0.15'; }
+    else if (gapMin > 360) { factor = 1.5; why += '／冷太久×1.5'; }
+    else why += '／×1';
+    const bonus = Math.min(Number(p.missCapPct) || 40, (state.streak || 0) * (Number(p.missBonusPct) || 10));
+    if (bonus > 0) why += '／没中加成+' + bonus;
+    return { hit: Math.min(100, base * factor + bonus), why };
+  }
+
+  #pCandidates(cfg, p) {
+    const idleMs = Math.max(300000, Number(p.idleThresholdMs) || 2700000);
+    const allowGroups = (cfg.allow?.groups ?? []).map(String);
+    const allowPrivate = (cfg.allow?.private ?? []).map(String);
+    const out = [];
+    for (const chatKey of this.store.listChats()) {
+      const [kind, id] = chatKey.split(':');
+      if (kind !== 'group' && kind !== 'private') continue;
+      if (kind === 'group') {
+        if (allowGroups.length > 0 ? !allowGroups.includes(id) : !cfg.allowAllWhenEmpty) continue;
+      } else {
+        if (allowPrivate.length > 0 ? !allowPrivate.includes(id) : !cfg.allowAllWhenEmpty) continue;
+      }
+      const meta = this.store.getChatMeta(chatKey);
+      if (!meta) continue;
+      if (meta.unread > 0) continue;
+      if (Date.now() - meta.lastTs < idleMs) continue;
+      if (this.runningChats.has(chatKey)) continue;
+      out.push(chatKey);
+    }
+    return out;
+  }
+
+  async #pStatePath() {
+    const pathmod = await import('node:path');
+    const { ROOT } = await import('./config.js');
+    return pathmod.join(ROOT, 'data', 'proactive-state.json');
+  }
+
+  async #pState() {
+    try {
+      const fsmod = await import('node:fs');
+      const file = await this.#pStatePath();
+      return JSON.parse(fsmod.readFileSync(file, 'utf8')) || {};
+    } catch {
+      return { streak: 0, lastSpokeAt: 0 };
+    }
+  }
+
+  async #pSave(state) {
+    const fsmod = await import('node:fs');
+    const pathmod = await import('node:path');
+    const file = await this.#pStatePath();
+    fsmod.mkdirSync(pathmod.dirname(file), { recursive: true });
+    fsmod.writeFileSync(file, JSON.stringify(state, null, 1), 'utf8');
+  }
+
+  async #pLog(p, message) {
+    try {
+      const fsmod = await import('node:fs');
+      const pathmod = await import('node:path');
+      const { ROOT } = await import('./config.js');
+      const file = pathmod.join(ROOT, 'data', 'proactive-log.txt');
+      const stamp = new Date().toLocaleString('zh-CN', { hour12: false });
+      let old = '';
+      try { old = fsmod.readFileSync(file, 'utf8'); } catch { old = ''; }
+      const lines = (old + stamp + '  ' + message + '\n').split('\n');
+      fsmod.writeFileSync(file, lines.slice(Math.max(0, lines.length - 200)).join('\n'), 'utf8');
+    } catch {
+      /* 记不上不影响主流程 */
+    }
+  }

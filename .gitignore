@@ -1,0 +1,6 @@
+node_modules/
+data/
+*.log
+*.bak
+*.bak-proactive
+.DS_Store

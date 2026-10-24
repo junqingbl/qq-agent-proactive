@@ -1,0 +1,32 @@
+{
+  "id": "proactive-private",
+  "name": "主动搭话（私聊）",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "没人在说话的时候，让它自己开口：本地掷骰、峰谷命中线、安静时段、冷却、连续没中加成，掷中才花模型。",
+  "author": "制作洛",
+  "category": "能力",
+  "summary": "主动开口",
+  "entry": "index.js",
+  "priority": 300,
+  "defaultEnabled": false,
+  "hooks": [],
+  "tools": false,
+  "promptSections": false,
+  "config": {
+    "enabled": false,
+    "intervalMin": 30,
+    "cooldownMin": 20,
+    "idleMin": 45,
+    "quietStart": 1,
+    "quietEnd": 8,
+    "peakPct": 20,
+    "offPeakPct": 60,
+    "missBonusPct": 10,
+    "missBonusCapPct": 40,
+    "dryRun": false,
+    "scopes": {}
+  },
+  "permissions": ["send"],
+  "scopes": ["all"]
+}
