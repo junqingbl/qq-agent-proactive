@@ -8,6 +8,9 @@
 
 ![主动搭话是怎么判断该不该开口的](docs/how-it-works.png)
 
+> 这里只讲「主动搭话」。备份、记忆本、日记、心情、本地表情这几样在另一个仓库：
+> **[bg-qqagent-plugins](https://github.com/junqingbl/bg-qqagent-plugins)**
+
 ## 这个仓库里有两个版本
 
 | 你的程序 | 怎么认 | 用哪个目录 |
