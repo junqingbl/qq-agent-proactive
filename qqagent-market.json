@@ -1,0 +1,9 @@
+{
+  "name": "洛洛的插件",
+  "plugins": [
+    {
+      "id": "proactive-private",
+      "path": "proactive-private"
+    }
+  ]
+}
