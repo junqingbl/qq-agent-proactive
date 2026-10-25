@@ -27,6 +27,18 @@
     "dryRun": false,
     "scopes": {}
   },
-  "permissions": ["send"],
-  "scopes": ["all"]
+  "permissions": [
+    "send"
+  ],
+  "scopes": [
+    "all"
+  ],
+  "ui": "ui.js",
+  "uiTab": {
+    "id": "proactive-cfg",
+    "label": "搭话设置"
+  },
+  "homepage": "https://github.com/junqingbl/qq-agent-proactive",
+  "repository": "https://github.com/junqingbl/qq-agent-proactive",
+  "license": "MIT"
 }
